@@ -3,7 +3,6 @@
 #include <x86intrin.h>
 #include <execution>
 #include <numeric>
-#include <immintrin.h>
 
 // Function to allocate aligned memory
 inline void* aligned_malloc(std::size_t bytes) {
@@ -57,7 +56,6 @@ void normalize_data(int ny, int nx, const float* data, std::vector<double>& norm
         double row_mean = calculate_row_mean(&data[j * nx], nx);
         double row_root_sq_sum = calculate_row_root_sq_sum(&data[j * nx], nx, row_mean);
         // Normalize each element of the row and store in the normalized data vector
-        #pragma omp simd
         for(int i=0; i < nx; i++){
             normalized_data[i + j * nx] = (((double) data[i + j * nx]) - row_mean) / row_root_sq_sum;
         }
@@ -74,10 +72,9 @@ void convert_to_vector_form(int ny, int nx, const std::vector<double>& normalize
     // Vectorization: Convert normalized data to vector form
     #pragma omp parallel for schedule(static, 1)
     for(int block_index=0; block_index < num_blocks; block_index++){
-         #pragma omp simd
         for(int i=0; i < nx; i++){
             for(int vector_index=0; vector_index < num_vectors_per_block; vector_index++){
-                const int PREFETCH_DISTANCE = 28;
+                const int PREFETCH_DISTANCE = 20;
                 int j = num_vectors_per_block * block_index + vector_index;
                 // Prefetch the data to improve cache performance
                 __builtin_prefetch(&normalized_data[nx * j + i + PREFETCH_DISTANCE]);
@@ -103,9 +100,8 @@ void compute_correlations(int ny, int nx, double4_t* vector_data, float* result)
             double4_t z01 = {0,0,0,0};
             double4_t z10 = {0,0,0,0};
             double4_t z11 = {0,0,0,0};
-             #pragma omp simd
             for(int k=0; k < nx; k++){
-                const int PREFETCH_DISTANCE = 20;
+                const int PREFETCH_DISTANCE = 12;
                 // Prefetch the vectorized data to improve cache performance
                 __builtin_prefetch(&vector_data[nx * block_row_index + k + PREFETCH_DISTANCE]);
                 __builtin_prefetch(&vector_data[nx * block_col_index + k + PREFETCH_DISTANCE]);
